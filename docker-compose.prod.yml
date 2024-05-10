@@ -1,0 +1,12 @@
+services:
+  nestjs-api-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./src:/usr/src/app/src
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
