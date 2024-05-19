@@ -58,20 +58,41 @@ export class RolesController {
 
   @Get()
   @ApiOperation({ summary: 'Get list of roles' })
-  @ApiQuery({ name: 'page', type: PageDTO })
-  @ApiQuery({ name: 'limit', type: LimitDTO })
+  @ApiQuery({ name: 'pageIndex', type: PageDTO })
+  @ApiQuery({ name: 'pageSize', type: LimitDTO })
+  @ApiQuery({ name: 'sort', required: false })
+  @ApiQuery({ name: 'filter', required: false })
   @ApiPaginatedResponse(RoleDto)
   @ApiUnauthorizedResponse({
     description: 'Unauthorized',
     type: UnauthorizedSchema,
   })
   async getList(
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('pageIndex', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('sort') sort?: string,
+    @Query('filter') filter?: string,
   ) {
-    const { listRole, meta } = await this.rolesService.getList({ page, limit });
+    const { listRole, meta } = await this.rolesService.getList(
+      { page, limit },
+      sort,
+      filter,
+    );
 
     return new PaginatedDto(true, listRole, meta);
+  }
+
+  @Get('all')
+  @ApiOperation({ summary: 'Get all roles' })
+  @ApiOkCustomResponse(RoleWithPermissionsDto)
+  @ApiUnauthorizedResponse({
+    description: 'Unauthorized',
+    type: UnauthorizedSchema,
+  })
+  async getAll() {
+    const roles = await this.rolesService.getAll();
+
+    return new ResponseDto(true, roles);
   }
 
   @Get(':id')
@@ -116,6 +137,21 @@ export class RolesController {
     const role = await this.rolesService.update(id, updateRoleDto);
 
     return new ResponseDto(true, role);
+  }
+
+  @Delete('bulk-delete')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Delete menu by id' })
+  @ApiUnauthorizedResponse({
+    description: 'Unauthorized',
+    type: UnauthorizedSchema,
+  })
+  @ApiNotFoundResponse({
+    description: 'Menu not found',
+    type: NotFoundSchema,
+  })
+  bulkRemove(@Body('ids') ids: number[]) {
+    return this.rolesService.bulkRemove(ids);
   }
 
   @Delete(':id')

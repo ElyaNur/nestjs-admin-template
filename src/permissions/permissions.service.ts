@@ -10,7 +10,7 @@ import { UpdatePermissionDto } from './dto/update-permission.dto';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { Logger } from 'winston';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { ILike, In, Repository } from 'typeorm';
 import { Permission } from './entities/permission.entity';
 import { PermissionDto } from './dto/permission.dto';
 import { IPaginationOptions, paginate } from 'nestjs-typeorm-paginate';
@@ -55,14 +55,35 @@ export class PermissionsService {
     return new PermissionDto(permission);
   }
 
-  async getList(option: IPaginationOptions) {
-    const permissions = await paginate(this.permissionRepository, option);
+  async getList(option: IPaginationOptions, sort?: string, filter?: string) {
+    const paginationOptions = {};
+
+    if (sort) {
+      const [sortField, sortOrder] = sort.split(':');
+      paginationOptions['order'] = { [sortField]: sortOrder };
+    }
+
+    if (filter) {
+      paginationOptions['where'] = [{ name: ILike(`%${filter}%`) }];
+    }
+
+    const permissions = await paginate(
+      this.permissionRepository,
+      option,
+      paginationOptions,
+    );
 
     const listPermission = permissions.items.map(
       (permission) => new PermissionDto(permission),
     );
 
     return { listPermission, meta: permissions.meta };
+  }
+
+  async getAll() {
+    const permissions = await this.permissionRepository.find();
+
+    return permissions.map((permission) => new PermissionDto(permission));
   }
 
   async findOne(id: number) {
@@ -123,8 +144,25 @@ export class PermissionsService {
     }
   }
 
+  async bulkRemove(ids: number[]) {
+    const menu = await this.permissionRepository.delete(ids);
+    if (menu.affected === 0) {
+      throw new NotFoundException('Permission not found');
+    }
+
+    if (menu.affected !== ids.length) {
+      throw new NotFoundException('Some permissions not found');
+    }
+  }
+
   async assignPermissionToRole(roleId: number, permissionId: number) {
-    const role = new Role(await this.roleService.findOne(roleId));
+    let role = await this.roleService.findOne(roleId);
+    role = new Role({
+      ...role,
+      permissions: role.permissions.map(
+        (permission) => new Permission(permission),
+      ),
+    });
 
     const permission = new Permission(
       await this.permissionRepository.findOne({
@@ -149,7 +187,14 @@ export class PermissionsService {
       ]);
     }
 
-    permission.roles.push(role);
+    permission.roles.push(
+      new Role({
+        ...role,
+        permissions: role.permissions.map(
+          (permission) => new Permission(permission),
+        ),
+      }),
+    );
 
     return new PermissionDto(await this.permissionRepository.save(permission));
   }

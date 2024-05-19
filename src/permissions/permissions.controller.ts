@@ -67,15 +67,31 @@ export class PermissionsController {
     type: UnauthorizedSchema,
   })
   async getList(
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('pageIndex', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('sort') sort?: string,
+    @Query('filter') filter?: string,
   ) {
-    const { listPermission, meta } = await this.permissionsService.getList({
-      page,
-      limit,
-    });
+    const { listPermission, meta } = await this.permissionsService.getList(
+      { page, limit },
+      sort,
+      filter,
+    );
 
     return new PaginatedDto(true, listPermission, meta);
+  }
+
+  @Get('all')
+  @ApiOperation({ summary: 'Get all permissions' })
+  @ApiOkCustomResponse(PermissionDto)
+  @ApiUnauthorizedResponse({
+    description: 'Unauthorized',
+    type: UnauthorizedSchema,
+  })
+  async getAll() {
+    const permissions = await this.permissionsService.getAll();
+
+    return new ResponseDto(true, permissions);
   }
 
   @Get(':id')
@@ -126,6 +142,21 @@ export class PermissionsController {
     );
 
     return new ResponseDto(true, permission);
+  }
+
+  @Delete('bulk-delete')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Delete permission by id' })
+  @ApiUnauthorizedResponse({
+    description: 'Unauthorized',
+    type: UnauthorizedSchema,
+  })
+  @ApiNotFoundResponse({
+    description: 'Permission not found',
+    type: NotFoundSchema,
+  })
+  bulkRemove(@Body('ids') ids: number[]) {
+    return this.permissionsService.bulkRemove(ids);
   }
 
   @Delete(':id')

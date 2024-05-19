@@ -1,5 +1,11 @@
-import { IsEmail, IsNotEmpty, IsString, Length } from 'class-validator';
-import { Exclude } from 'class-transformer';
+import {
+  IsArray,
+  IsEmail,
+  IsNotEmpty,
+  IsString,
+  Length,
+} from 'class-validator';
+import { Exclude, Expose } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateUserDto {
@@ -20,10 +26,15 @@ export class CreateUserDto {
   @ApiProperty({
     example: 'chariselyasa',
   })
-  @IsNotEmpty()
-  @IsString()
   @Exclude({ toPlainOnly: true })
   password: string;
+
+  @ApiProperty({
+    example: [1, 2],
+  })
+  @Expose({ name: 'role_ids' })
+  @IsArray()
+  roleIds: number[];
 
   constructor(user: Partial<CreateUserDto>) {
     Object.assign(this, user);

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { FindOptionsWhere, ILike, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Logger } from 'winston';
@@ -16,6 +16,7 @@ import { IPaginationOptions, paginate } from 'nestjs-typeorm-paginate';
 import { UserDto, UserWithRolesDto } from './dto/user.dto';
 import { RolesService } from '../roles/roles.service';
 import { RoleDto } from '../roles/dto/role.dto';
+import { Role } from '../roles/entities/role.entity';
 
 @Injectable()
 export class UsersService {
@@ -55,15 +56,53 @@ export class UsersService {
       });
     }
 
+    let roles: Role[] = [];
+
+    if (createUserDto.roleIds && createUserDto.roleIds.length > 0) {
+      roles = await this.roleService.findByIds(createUserDto.roleIds);
+      if (roles.length !== createUserDto.roleIds.length) {
+        throw new NotFoundException('Some roles not found');
+      }
+    }
+
+    if (!createUserDto.password) {
+      createUserDto.password = '12345678';
+    }
+
     createUserDto.password = await hash(createUserDto.password, 10);
 
-    const user = await this.userRepository.save(new User(createUserDto));
+    const user = await this.userRepository.save(
+      new User({
+        ...createUserDto,
+        roles,
+      }),
+    );
 
     return new UserDto(user);
   }
 
-  async getList(option: IPaginationOptions) {
-    const users = await paginate(this.userRepository, option);
+  async getList(option: IPaginationOptions, sort?: string, filter?: string) {
+    const paginationOptions = {
+      relations: ['roles'],
+    };
+
+    if (sort) {
+      const [sortField, sortOrder] = sort.split(':');
+      paginationOptions['order'] = { [sortField]: sortOrder };
+    }
+
+    if (filter) {
+      paginationOptions['where'] = [
+        { username: ILike(`%${filter}%`) },
+        { email: ILike(`%${filter}%`) },
+      ];
+    }
+
+    const users = await paginate(
+      this.userRepository,
+      option,
+      paginationOptions,
+    );
 
     const listUser = users.items.map((user) => new CreateUserDto(user));
 
@@ -71,7 +110,10 @@ export class UsersService {
   }
 
   async findOne(key: string, value: number | string) {
-    const user = await this.userRepository.findOneBy({ [key]: value });
+    const user = await this.userRepository.findOne({
+      where: { [key]: value },
+      relations: ['roles'],
+    });
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -83,7 +125,11 @@ export class UsersService {
   async findOneWithRelation(where: FindOptionsWhere<User>) {
     const user = await this.userRepository.findOne({
       where,
-      relations: { roles: true },
+      relations: {
+        roles: {
+          permissions: true,
+        },
+      },
     });
 
     if (!user) {
@@ -103,12 +149,34 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    const roles: Role[] = userExist.roles;
+
+    if (updateUserDto.roleIds && updateUserDto.roleIds.length > 0) {
+      const newRoles = await this.roleService.findByIds(updateUserDto.roleIds);
+      if (newRoles.length !== updateUserDto.roleIds.length) {
+        throw new NotFoundException('Some roles not found');
+      }
+
+      roles.push(...newRoles);
+    }
+
     const user = await this.userRepository.save({
       ...userExist,
-      ...new User(updateUserDto),
+      ...new User({ ...updateUserDto, roles }),
     });
 
     return new UserDto(user);
+  }
+
+  async bulkRemove(ids: number[]) {
+    const menu = await this.userRepository.delete(ids);
+    if (menu.affected === 0) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (menu.affected !== ids.length) {
+      throw new NotFoundException('Some users not found');
+    }
   }
 
   async remove(id: number) {

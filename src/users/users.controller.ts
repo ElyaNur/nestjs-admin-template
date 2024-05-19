@@ -67,21 +67,26 @@ export class UsersController {
 
   @Get()
   @ApiOperation({ summary: 'Get list user' })
-  @ApiQuery({ name: 'page', type: PageDTO })
-  @ApiQuery({ name: 'limit', type: LimitDTO })
+  @ApiQuery({ name: 'pageIndex', type: PageDTO })
+  @ApiQuery({ name: 'pageSize', type: LimitDTO })
+  @ApiQuery({ name: 'sort', required: false })
+  @ApiQuery({ name: 'filter', required: false })
   @ApiPaginatedResponse(CreateUserDto)
   @ApiUnauthorizedResponse({
     description: 'Unauthorized',
     type: UnauthorizedSchema,
   })
   async getList(
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('pageIndex', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('pageSize', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('sort') sort?: string,
+    @Query('filter') filter?: string,
   ) {
-    const { listUser, meta } = await this.usersService.getList({
-      page,
-      limit,
-    });
+    const { listUser, meta } = await this.usersService.getList(
+      { page, limit },
+      sort,
+      filter,
+    );
 
     return new PaginatedDto<CreateUserDto[]>(true, listUser, meta);
   }
@@ -134,6 +139,21 @@ export class UsersController {
     const user = await this.usersService.update(id, updateUserDto);
 
     return new ResponseDto<UserDto>(true, user);
+  }
+
+  @Delete('bulk-delete')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Delete user by id' })
+  @ApiUnauthorizedResponse({
+    description: 'Unauthorized',
+    type: UnauthorizedSchema,
+  })
+  @ApiNotFoundResponse({
+    description: 'User not found',
+    type: NotFoundSchema,
+  })
+  bulkRemove(@Body('ids') ids: number[]) {
+    return this.usersService.bulkRemove(ids);
   }
 
   @Delete(':id')

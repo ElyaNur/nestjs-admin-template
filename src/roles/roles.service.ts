@@ -10,9 +10,9 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { Logger } from 'winston';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { ILike, In, Repository } from 'typeorm';
 import { Role } from './entities/role.entity';
-import { RoleDto } from './dto/role.dto';
+import { RoleDto, RoleWithPermissionsDto } from './dto/role.dto';
 import { IPaginationOptions, paginate } from 'nestjs-typeorm-paginate';
 import { PermissionsService } from '../permissions/permissions.service';
 import { Permission } from '../permissions/entities/permission.entity';
@@ -45,27 +45,67 @@ export class RolesService {
       ]);
     }
 
-    const role = await this.roleRepository.save(new Role(createRoleDto));
+    if (createRoleDto.permissionIds && createRoleDto.permissionIds.length > 0) {
+      createRoleDto.permissions = await this.permissionsService.findByIds(
+        createRoleDto.permissionIds,
+      );
+    }
+
+    const role = await this.roleRepository.save(
+      new Role({
+        ...createRoleDto,
+        permissions: createRoleDto.permissions?.map(
+          (permission) => new Permission(permission),
+        ),
+      }),
+    );
 
     return new RoleDto(role);
   }
 
-  async getList(option: IPaginationOptions) {
-    const roles = await paginate(this.roleRepository, option);
+  async getList(option: IPaginationOptions, sort?: string, filter?: string) {
+    const paginationOptions = {};
 
-    const listRole = roles.items.map((role) => new RoleDto(role));
+    if (sort) {
+      const [sortField, sortOrder] = sort.split(':');
+      paginationOptions['order'] = { [sortField]: sortOrder };
+    }
+
+    if (filter) {
+      paginationOptions['where'] = [{ name: ILike(`%${filter}%`) }];
+    }
+
+    const roles = await paginate(this.roleRepository, option, {
+      ...paginationOptions,
+      relations: ['permissions'],
+    });
+
+    const listRole = roles.items.map(
+      (role) => new RoleWithPermissionsDto(role),
+    );
 
     return { listRole, meta: roles.meta };
   }
 
+  async getAll() {
+    const roles = await this.roleRepository.find({
+      relations: ['permissions'],
+    });
+
+    return roles.map((role) => new RoleWithPermissionsDto(role));
+  }
+
   async findOne(id: number) {
-    const role = await this.roleRepository.findOneBy({ id });
+    const role = await this.roleRepository.findOne({
+      where: { id },
+      relations: ['permissions'],
+    });
 
     if (!role) {
       throw new NotFoundException(`Role with id ${id} not found`);
     }
 
-    return new RoleDto(role);
+    return new RoleWithPermissionsDto(role);
   }
 
   async findByIds(ids: number[]) {
@@ -89,6 +129,16 @@ export class RolesService {
       throw new NotFoundException(`Role with id ${id} not found`);
     }
 
+    if (updateRoleDto.permissionIds && updateRoleDto.permissionIds.length > 0) {
+      updateRoleDto.permissions = await this.permissionsService.findByIds(
+        updateRoleDto.permissionIds,
+      );
+    }
+
+    if (updateRoleDto.permissionIds) {
+      updateRoleDto.permissions = [];
+    }
+
     const role = await this.roleRepository.save({
       ...roleExist,
       ...updateRoleDto,
@@ -101,6 +151,17 @@ export class RolesService {
     const role = await this.roleRepository.delete(id);
     if (role.affected === 0) {
       throw new NotFoundException(`Role with id ${id} not found`);
+    }
+  }
+
+  async bulkRemove(ids: number[]) {
+    const menu = await this.roleRepository.delete(ids);
+    if (menu.affected === 0) {
+      throw new NotFoundException('Role not found');
+    }
+
+    if (menu.affected !== ids.length) {
+      throw new NotFoundException('Some roles not found');
     }
   }
 

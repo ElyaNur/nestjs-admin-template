@@ -8,6 +8,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesModule } from './roles/roles.module';
 import { PermissionsModule } from './permissions/permissions.module';
+import { MenusModule } from './menus/menus.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { PermissionsModule } from './permissions/permissions.module';
     CommonModule,
     RolesModule,
     PermissionsModule,
+    MenusModule,
   ],
   controllers: [],
   providers: [

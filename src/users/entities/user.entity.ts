@@ -54,4 +54,8 @@ export class User {
   constructor(user: Partial<User>) {
     Object.assign(this, user);
   }
+
+  getPermissions() {
+    return this.roles.map((role) => role.permissions).flat();
+  }
 }
